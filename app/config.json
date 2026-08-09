@@ -1,0 +1,6 @@
+{
+  "allow_web_search": true,
+  "allow_google_maps": false,
+  "grounding_keywords": [],
+  "mcp_servers": {}
+}
