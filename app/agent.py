@@ -22,7 +22,6 @@ if os.path.exists(skill_md_path):
 
 scripts_dir = os.path.join(runtime_dir, "scripts")
 system_tools_dir = os.path.join(runtime_dir, "core", "system_tools")
-tools = load_local_tools(system_tools_dir) + load_local_tools(scripts_dir)
 
 allow_web_search = True
 allow_google_maps = False
@@ -43,21 +42,25 @@ if os.path.exists(config_json_path):
         import logging
         logging.getLogger(__name__).warning(f"Failed to read/parse config.json: {e}")
 
-if allow_web_search:
-    try:
-        from google.adk.tools import google_search
-        tools.append(google_search)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to import google_search tool: {e}")
-
-if allow_google_maps:
-    try:
-        from google.adk.tools import google_maps_grounding
-        tools.append(google_maps_grounding)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to import google_maps_grounding tool: {e}")
+if allow_web_search or allow_google_maps:
+    # Vertex AI REST API requirement: Search/Grounding tools CANNOT be combined with custom function declaration tools
+    tools = []
+    if allow_web_search:
+        try:
+            from google.adk.tools import google_search
+            tools.append(google_search)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to import google_search tool: {e}")
+    if allow_google_maps:
+        try:
+            from google.adk.tools import google_maps_grounding
+            tools.append(google_maps_grounding)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to import google_maps_grounding tool: {e}")
+else:
+    tools = load_local_tools(system_tools_dir) + load_local_tools(scripts_dir)
 
 from app.app_utils.vertex_gemini import get_model
 
