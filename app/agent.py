@@ -1,64 +1,32 @@
 import os
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 
-# Force regional Vertex AI routing only if no direct API keys are configured
-if not os.environ.get("GEMINI_API_KEY") and not os.environ.get("GOOGLE_API_KEY"):
-    os.environ.pop("GOOGLE_GENAI_USE_ENTERPRISE", None)
-    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
-    os.environ.pop("GEMINI_API_KEY", None)
-    os.environ.pop("GOOGLE_API_KEY", None)
-import asyncio
-import importlib.util
+# Force regional Vertex AI routing unconditionally
+os.environ.pop("GOOGLE_GENAI_USE_ENTERPRISE", None)
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
+os.environ.pop("GEMINI_API_KEY", None)
+os.environ.pop("GOOGLE_API_KEY", None)
 import re
+
 from google.adk import Agent as AdkAgent
 
 from app.core.load_local_tools import load_local_tools
 
-# Statically import custom script/tool modules here so the Vertex AI packaging dependency analyzer
-# sees them and bundles them in the cloud deployment container/ZIP.
-from app.core.system_tools import (
-    consultAgent,
-    discover_agents,
-)
-
-# 1. Require SKILL.md as the Single Source of Truth for metadata (name, description) and instructions
+# 1. Read system prompt instructions from SKILL.md and load tools at module level
 runtime_dir = os.path.dirname(os.path.abspath(__file__))
 skill_md_path = os.path.join(runtime_dir, "SKILL.md")
-if not os.path.exists(skill_md_path):
-    raise FileNotFoundError(f"Required agent definition file missing: {skill_md_path}")
-
-with open(skill_md_path, "r", encoding="utf-8") as f:
-    skill_content = f.read()
-
-fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", skill_content, flags=re.DOTALL)
-if not fm_match:
-    raise ValueError(f"SKILL.md is missing required YAML frontmatter header (--- ... ---): {skill_md_path}")
-
-fm_text = fm_match.group(1)
-name_m = re.search(r'^name:\s*["\']?([^"\'\n]+)["\']?', fm_text, re.MULTILINE)
-if not name_m:
-    raise ValueError(f"SKILL.md frontmatter is missing required 'name:' field: {skill_md_path}")
-
-desc_m = re.search(r'^description:\s*["\']?([^"\'\n]+)["\']?', fm_text, re.MULTILINE)
-if not desc_m:
-    raise ValueError(f"SKILL.md frontmatter is missing required 'description:' field: {skill_md_path}")
-
-agent_name = name_m.group(1).strip().replace('-', '_')
-agent_description = desc_m.group(1).strip()
-system_instruction = skill_content[fm_match.end():].strip()
+system_instruction = "You are the Hubscape Navigation Agent."
+if os.path.exists(skill_md_path):
+    with open(skill_md_path, encoding="utf-8") as f:
+        skill_content = f.read()
+    system_instruction = re.sub(r"^---.*?---", "", skill_content, flags=re.DOTALL).strip()
 
 scripts_dir = os.path.join(runtime_dir, "scripts")
 system_tools_dir = os.path.join(runtime_dir, "core", "system_tools")
 tools = load_local_tools(system_tools_dir) + load_local_tools(scripts_dir)
 
-allow_web_search = False
+allow_web_search = True
 allow_google_maps = False
 
-# Load config.json settings
 config_json_path = os.path.join(runtime_dir, "config.json")
 if not os.path.exists(config_json_path):
     config_json_path = os.path.join(os.path.dirname(runtime_dir), "config.json")
@@ -71,38 +39,10 @@ if os.path.exists(config_json_path):
                 allow_web_search = bool(config_data.get("allow_web_search") if "allow_web_search" in config_data else config_data.get("allowWebSearch"))
             if "allow_google_maps" in config_data or "allowGoogleMaps" in config_data:
                 allow_google_maps = bool(config_data.get("allow_google_maps") if "allow_google_maps" in config_data else config_data.get("allowGoogleMaps"))
-
-            mcp_servers = config_data.get("mcp_servers", {})
-            if mcp_servers:
-                try:
-                    from google.adk.tools.mcp_tool.mcp_toolset import McpToolset, StreamableHTTPConnectionParams
-                    
-                    for server_name, server_config in mcp_servers.items():
-                        url = server_config.get("url")
-                        if not url:
-                            continue
-                        
-                        headers = server_config.get("headers")
-                        
-                        kwargs = {"url": url}
-                        if headers is not None:
-                            kwargs["headers"] = headers
-                            
-                        connection_params = StreamableHTTPConnectionParams(**kwargs)
-                        toolset = McpToolset(connection_params=connection_params)
-                        # Tag the toolset with metadata for request-time resolution/filtering
-                        toolset._mcp_server_name = server_name
-                        toolset._mcp_raw_headers = headers or {}
-                        
-                        tools.append(toolset)
-                except ImportError:
-                    import logging
-                    logging.getLogger(__name__).warning("⚠️ mcp library or McpToolset not available. Skipping static MCP server loading.")
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Failed to read/parse config.json: {e}")
 
-# Register built-in ADK grounding tools based on resolved toggles
 if allow_web_search:
     try:
         from google.adk.tools import google_search
@@ -123,8 +63,8 @@ from app.app_utils.vertex_gemini import get_model
 
 root_agent = AdkAgent(
     model=get_model("gemini-2.5-flash"),
-    name=agent_name,
-    description=agent_description,
+    name='navigation_agent',
+    description='Dedicated navigation and location agent for calculating driving distances, travel times, route directions, venue locations, and navigation inquiries.',
     instruction=system_instruction,
     tools=tools
 )
@@ -135,8 +75,8 @@ from app.core.geap_agent_wrapper import GEAPAgentWrapper
 agent_app = GEAPAgentWrapper(root_agent)
 
 from google.adk.apps import App
+
 app = App(
     root_agent=root_agent,
     name="app",
 )
-
