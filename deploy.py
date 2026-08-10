@@ -33,66 +33,62 @@ def get_new_agent_name():
 # Helper to sync the agent name to all static config files
 def sync_agent_name(new_name):
     project_dir = os.path.dirname(os.path.abspath(__file__))
+    print(f"Synchronizing agent name: '{new_name}' across manifests and config files...")
     
-    old_name = None
+    old_names_to_scrub = ["custom-agent", "app"]
     pyproject_path = os.path.join(project_dir, "pyproject.toml")
     if os.path.exists(pyproject_path):
         try:
             with open(pyproject_path, "r", encoding="utf-8") as f:
                 content = f.read()
             match = re.search(r'^name\s*=\s*["\']?([^"\'\n]+)["\']?', content, re.MULTILINE)
-            if match:
-                old_name = match.group(1)
+            if match and match.group(1) not in old_names_to_scrub and match.group(1) != new_name:
+                old_names_to_scrub.append(match.group(1))
         except Exception as e:
             print(f"Warning: Failed to read old name from pyproject.toml. Error: {e}")
+
+    for old_name in old_names_to_scrub:
+        if old_name == new_name:
+            continue
             
-    if not old_name:
-        old_name = "custom-agent"
+        replacements = {
+            "agents-cli-manifest.yaml": [
+                (rf'^name:\s*["\']?{re.escape(old_name)}["\']?', f'name: "{new_name}"')
+            ],
+            "pyproject.toml": [
+                (rf'^name\s*=\s*["\']?{re.escape(old_name)}["\']?', f'name = "{new_name}"')
+            ],
+            "uv.lock": [
+                (rf'^name\s*=\s*["\']?{re.escape(old_name)}["\']?', f'name = "{new_name}"')
+            ],
+            os.path.join("app", "SKILL.md"): [
+                (rf'^name:\s*{re.escape(old_name)}', f'name: {new_name}')
+            ],
+            os.path.join("deployment", "terraform", "single-project", "variables.tf"): [
+                (re.escape(old_name), new_name)
+            ],
+            os.path.join("deployment", "terraform", "single-project", "vars", "env.tfvars"): [
+                (re.escape(old_name), new_name)
+            ]
+        }
         
-    if old_name == new_name:
-        print(f"Agent name is already synchronized as '{new_name}'.")
-        return
-        
-    print(f"Synchronizing agent name: '{old_name}' -> '{new_name}'...")
-    
-    replacements = {
-        "agents-cli-manifest.yaml": [
-            (rf'^name:\s*["\']?{re.escape(old_name)}["\']?', f'name: "{new_name}"')
-        ],
-        "pyproject.toml": [
-            (rf'^name\s*=\s*["\']?{re.escape(old_name)}["\']?', f'name = "{new_name}"')
-        ],
-        "uv.lock": [
-            (rf'^name\s*=\s*["\']?{re.escape(old_name)}["\']?', f'name = "{new_name}"')
-        ],
-        os.path.join("app", "SKILL.md"): [
-            (rf'^name:\s*{re.escape(old_name)}', f'name: {new_name}')
-        ],
-        os.path.join("deployment", "terraform", "single-project", "variables.tf"): [
-            (re.escape(old_name), new_name)
-        ],
-        os.path.join("deployment", "terraform", "single-project", "vars", "env.tfvars"): [
-            (re.escape(old_name), new_name)
-        ]
-    }
-    
-    for relative_path, rules in replacements.items():
-        file_path = os.path.join(project_dir, relative_path)
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                
-                updated_content = content
-                for pattern, repl in rules:
-                    updated_content = re.sub(pattern, repl, updated_content, flags=re.MULTILINE)
-                        
-                if updated_content != content:
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        f.write(updated_content)
-                    print(f"  Updated {relative_path}")
-            except Exception as e:
-                print(f"Warning: Failed to update {relative_path}. Error: {e}")
+        for relative_path, rules in replacements.items():
+            file_path = os.path.join(project_dir, relative_path)
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    
+                    updated_content = content
+                    for pattern, repl in rules:
+                        updated_content = re.sub(pattern, repl, updated_content, flags=re.MULTILINE)
+                            
+                    if updated_content != content:
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.write(updated_content)
+                        print(f"  Updated {relative_path} ('{old_name}' -> '{new_name}')")
+                except Exception as e:
+                    print(f"Warning: Failed to update {relative_path}. Error: {e}")
 
 # Helper to sync config.json to agents-cli-manifest.yaml
 def sync_config_to_manifest():
