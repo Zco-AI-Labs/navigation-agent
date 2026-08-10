@@ -8,8 +8,21 @@ import re
 PROJECT_ID = os.getenv("GCP_PROJECT_ID", "hubscape-geap")
 LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 
-# Helper to extract the new agent name from app/agent.py
+# Helper to extract the new agent name from app/SKILL.md or app/agent.py
 def get_new_agent_name():
+    skill_md_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app", "SKILL.md")
+    if os.path.exists(skill_md_path):
+        try:
+            with open(skill_md_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            match = re.search(r'^name:\s*["\']?([^"\'\n]+)["\']?', content, re.MULTILINE)
+            if match:
+                parsed_name = match.group(1).strip()
+                if parsed_name and parsed_name != "app" and parsed_name != "custom-agent":
+                    return parsed_name.replace('_', '-')
+        except Exception as e:
+            print(f"Warning: Failed to parse app/SKILL.md for name. Error: {e}")
+
     agent_py_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app", "agent.py")
     if os.path.exists(agent_py_path):
         try:
@@ -24,7 +37,8 @@ def get_new_agent_name():
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from app.agent import root_agent
-        return root_agent.name.replace('_', '-')
+        if root_agent and hasattr(root_agent, "name") and root_agent.name:
+            return root_agent.name.replace('_', '-')
     except Exception as e:
         print(f"Warning: Failed to import root_agent. Error: {e}")
         
