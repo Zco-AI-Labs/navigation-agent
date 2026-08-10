@@ -1608,7 +1608,7 @@ wheels = [
 ]
 
 [[package]]
-name = "navigation-agent"
+name = "app"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

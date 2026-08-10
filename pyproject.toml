@@ -1,5 +1,5 @@
 [project]
-name = "navigation-agent"
+name = "app"
 version = "0.1.0"
 description = "Hubscape Navigation Agent for distances, routes, and location inquiries"
 authors = [
