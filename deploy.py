@@ -241,12 +241,12 @@ print(f"Executing: {' '.join(cmd)}")
 subprocess.run(cmd, env=env, check=True)
 print("🎉 Deployment completed successfully!")
 
-# Trigger dynamic registry sync on local backend if running
+# Trigger dynamic registry sync on backend
 try:
     import urllib.request
     import json
     
-    backend_url = os.getenv("HUBSCAPE_BACKEND_URL", "http://localhost:8000")
+    backend_url = os.getenv("HUBSCAPE_BACKEND_URL", "https://hubscape-backend-w3xi4ozhca-uc.a.run.app")
     secret = os.getenv("HUBSCAPE_HMAC_SECRET", "dev_secret_key_dont_use_in_prod")
     
     url = f"{backend_url.rstrip('/')}/api/agents/sync"
