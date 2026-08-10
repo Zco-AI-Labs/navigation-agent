@@ -76,10 +76,3 @@ from app.core.geap_agent_wrapper import GEAPAgentWrapper
 
 # Singleton instance used as the serialization target
 agent_app = GEAPAgentWrapper(root_agent)
-
-from google.adk.apps import App
-
-app = App(
-    root_agent=root_agent,
-    name="app",
-)
